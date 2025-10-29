@@ -51,15 +51,24 @@ public class WritingController {
                     grammarStyle,
                     mode
             );
-
             model.applyConfig(cfg);
 
-            // final prompt = preset instruction + user text
+            // Compose final prompt = (translation instruction?) + preset instruction + user text
+            String language = view.translateLang.getValue();
+            String langInstruction = (language != null && !language.equalsIgnoreCase("English"))
+                    ? "Write the final output in " + language + "."
+                    : "";
+
             String instruction = view.currentPresetInstruction().trim();
             String userText = view.input.getText();
-            String finalPrompt = instruction.isBlank()
+
+            String combinedInstruction = instruction.isBlank()
+                    ? langInstruction
+                    : (langInstruction.isBlank() ? instruction : (langInstruction + "\n" + instruction));
+
+            String finalPrompt = combinedInstruction.isBlank()
                     ? userText
-                    : instruction + "\n\n---\n\n" + userText;
+                    : combinedInstruction + "\n\n---\n\n" + userText;
 
             view.btnGenerate.setDisable(true);
             view.status.setText("Requesting…");
@@ -92,7 +101,7 @@ public class WritingController {
     }
 
     private void applyPresetDefaultsAndVisibility(String key) {
-        // Defaults first (temp/tone/style/text-mode)
+        // Defaults (temp/tone/style/text-mode)
         var p = Presets.all().getOrDefault(key, Presets.all().get(Presets.GENERAL));
         var c = p.defaults();
 
@@ -112,19 +121,24 @@ public class WritingController {
             default -> view.textMode.getSelectionModel().select("same");
         }
 
-        // Now visibility per preset
+        // Visibility per preset
         switch (key) {
             case Presets.CREATIVE -> {
                 view.setStyleVisible(false);     // hide style
                 view.setTextModeVisible(true);   // keep text mode
+                view.setTranslationVisible(true);
             }
             case Presets.CODEDOC -> {
                 view.setStyleVisible(false);     // hide style
                 view.setTextModeVisible(false);  // hide text mode
+                view.setTranslationVisible(false); // hide translation for code docs
+                // Reset to English to avoid stale hidden state
+                view.translateLang.getSelectionModel().select("English");
             }
             default -> {
                 view.setStyleVisible(true);
                 view.setTextModeVisible(true);
+                view.setTranslationVisible(true); // general + professional + academic
             }
         }
     }

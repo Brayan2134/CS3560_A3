@@ -6,7 +6,6 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
-import org.example.app.preset.Preset;
 import org.example.app.preset.Presets;
 
 import java.util.LinkedHashMap;
@@ -28,6 +27,10 @@ public class WritingView {
     public final RadioButton rbFormal = new RadioButton("Formal");
     public final ComboBox<String> style = new ComboBox<>();
     public final ComboBox<String> textMode = new ComboBox<>();
+
+    // Translation control
+    public final ComboBox<String> translateLang = new ComboBox<>();
+
     public final Button btnGenerate = new Button("Generate");
     public final Button btnResetPreset = new Button("Reset to preset");
     public final Label status = new Label("Idle");
@@ -39,18 +42,32 @@ public class WritingView {
     // Toggleable sections
     public TitledPane stylePane;
     public TitledPane textModePane;
+    public TitledPane translatePane;
 
     public WritingView() {
-        // Text areas
+        // Text areas (bigger defaults + wrapping)
         input.setPromptText("Type your text here…");
         output.setEditable(false);
         input.setWrapText(true);
         output.setWrapText(true);
+        input.setPrefRowCount(18);
+        output.setPrefRowCount(18);
 
-        HBox io = new HBox(10, wrap("Input", input), wrap("Output", output));
+        // Build IO area with wrappers that are allowed to grow
+        VBox leftBox  = (VBox) wrap("Input", input);
+        VBox rightBox = (VBox) wrap("Output", output);
+
+        HBox io = new HBox(10, leftBox, rightBox);
         io.setPadding(new Insets(10));
-        HBox.setHgrow(input, Priority.ALWAYS);
-        HBox.setHgrow(output, Priority.ALWAYS);
+
+        // ✅ Let the two columns grow inside the HBox
+        HBox.setHgrow(leftBox, Priority.ALWAYS);
+        HBox.setHgrow(rightBox, Priority.ALWAYS);
+
+        // ✅ Let the IO row grow inside the center VBox
+        VBox center = new VBox(8, io);
+        VBox.setVgrow(io, Priority.ALWAYS);
+        center.setPadding(new Insets(6));
 
         // Preset tabs (editable instruction boxes)
         buildPresetTabs();
@@ -68,6 +85,10 @@ public class WritingView {
         textMode.getItems().addAll("summarize", "same", "expand");
         textMode.getSelectionModel().select("same");
 
+        // Translation dropdown
+        translateLang.getItems().addAll("English", "Spanish", "French", "Italian", "Japanese", "Mandarin", "Korean");
+        translateLang.getSelectionModel().select("English");
+
         // Temperature slider + custom axis + tooltip + live value
         temperature.setBlockIncrement(0.1);
         temperature.setMajorTickUnit(0.5);
@@ -76,11 +97,11 @@ public class WritingView {
 
         Tooltip tempTip = new Tooltip(
                 "Temperature controls randomness/creativity:\n" +
-                        "0.0 = deterministic (precise, consistent)\n" +
-                        "0.2–0.4 = formal/professional writing\n" +
-                        "0.5 = balanced\n" +
-                        "0.6–0.8 = creative/varied phrasing\n" +
-                        "1.0+ = very playful, more surprising\n" +
+                        "• 0.0 = deterministic (precise, consistent)\n" +
+                        "• 0.2–0.4 = formal/professional writing\n" +
+                        "• ~0.5 = balanced\n" +
+                        "• 0.6–0.8 = creative/varied phrasing\n" +
+                        "• 1.0+ = very playful, more surprising\n" +
                         "Tip: lower for summaries & formal docs; higher for brainstorming."
         );
         Tooltip.install(temperature, tempTip);
@@ -101,12 +122,13 @@ public class WritingView {
         TitledPane tonePane = titled("Tone", new VBox(6, rbInformal, rbNeutral, rbFormal));
         stylePane = titled("Style", style);
         textModePane = titled("Text mode", textMode);
+        translatePane = titled("Translate", translateLang);
 
-        // Widen the presets area and right column
-        tabs.setTabMinWidth(80);
+        // Widen the presets area and right column (so 5 tabs fit nicely)
+        tabs.setTabMinWidth(100);
         tabs.setTabMaxWidth(Double.MAX_VALUE);
-        tabs.setPrefWidth(560);
-        tabs.setMinWidth(560);
+        tabs.setPrefWidth(640);
+        tabs.setMinWidth(640);
         VBox.setVgrow(tabs, Priority.ALWAYS);
 
         VBox right = new VBox(12,
@@ -118,16 +140,16 @@ public class WritingView {
                 tonePane,
                 stylePane,
                 textModePane,
+                translatePane,
                 btnGenerate,
                 new Separator(),
                 status
         );
         right.setAlignment(Pos.TOP_LEFT);
         right.setPadding(new Insets(12));
-        right.setPrefWidth(560); // wider than before
+        right.setPrefWidth(640);
 
-        VBox center = new VBox(8, io);
-        center.setPadding(new Insets(6));
+        // Layout
         root.setCenter(center);
         root.setRight(right);
     }
@@ -139,8 +161,8 @@ public class WritingView {
         Presets.all().forEach((key, preset) -> {
             TextArea instruction = new TextArea(preset.defaultInstruction().trim());
             instruction.setWrapText(true);
-            instruction.setPrefRowCount(10);     // taller editor
-            instruction.setPrefColumnCount(60);  // wider editor
+            instruction.setPrefRowCount(10);
+            instruction.setPrefColumnCount(60);
             VBox.setVgrow(instruction, Priority.ALWAYS);
 
             VBox content = new VBox(8,
@@ -177,7 +199,7 @@ public class WritingView {
     /** Reset the active tab's instruction to its default. */
     public void resetActivePresetInstructionToDefault() {
         String key = currentPresetKey();
-        Preset p = Presets.all().get(key);
+        var p = Presets.all().get(key);
         if (p != null) {
             TextArea ta = presetInstructionEditors.get(key);
             if (ta != null) ta.setText(p.defaultInstruction().trim());
@@ -187,7 +209,10 @@ public class WritingView {
     // ——— helpers ———
     private Node wrap(String title, Node n) {
         VBox box = new VBox(6, new Label(title), n);
+        // Let the inner control grow to fill vertical space
         VBox.setVgrow(n, Priority.ALWAYS);
+        // Important: the wrapper VBox must be allowed to grow inside its parent HBox
+        HBox.setHgrow(box, Priority.ALWAYS);
         return box;
     }
 
@@ -205,6 +230,10 @@ public class WritingView {
     public void setTextModeVisible(boolean visible) {
         textModePane.setManaged(visible);
         textModePane.setVisible(visible);
+    }
+    public void setTranslationVisible(boolean visible) {
+        translatePane.setManaged(visible);
+        translatePane.setVisible(visible);
     }
 
     public BorderPane getRoot() { return root; }
