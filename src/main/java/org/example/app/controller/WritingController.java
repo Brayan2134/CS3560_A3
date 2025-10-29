@@ -5,9 +5,12 @@ import javafx.beans.value.ChangeListener;
 import javafx.scene.control.Tab;
 import org.example.app.model.WritingConfig;
 import org.example.app.model.WritingModel;
-import org.example.app.preset.Presets;
+import org.example.app.preset.Preset;
+import org.example.app.preset.PresetCapabilities;
+import org.example.app.preset.PresetRegistry;
 import org.example.app.view.WritingView;
 
+/** Glue: reads the view, builds config, applies preset defaults, calls model. */
 public class WritingController {
 
     private final WritingModel model;
@@ -21,22 +24,26 @@ public class WritingController {
     }
 
     private void wire() {
+        // Generate
         view.btnGenerate.setOnAction(e -> {
             String presetKey = view.currentPresetKey();
+            Preset preset = PresetRegistry.all().get(presetKey);
+            if (preset == null) {
+                // fallback to first preset if somehow missing
+                preset = PresetRegistry.all().values().iterator().next();
+            }
+            PresetCapabilities caps = preset.capabilities();
 
-            // Determine grammarStyle and textMode based on preset visibility/override rules
-            String grammarStyle = switch (presetKey) {
-                case Presets.CREATIVE, Presets.CODEDOC -> "none"; // ignore style for these presets
-                default -> view.style.getValue();
-            };
-            WritingConfig.TextMode mode = switch (presetKey) {
-                case Presets.CODEDOC -> WritingConfig.TextMode.SUMMARIZE; // lock to summarize
-                default -> switch (view.textMode.getValue()) {
-                    case "summarize" -> WritingConfig.TextMode.SUMMARIZE;
-                    case "expand"    -> WritingConfig.TextMode.EXPAND;
-                    default          -> WritingConfig.TextMode.SAME;
-                };
-            };
+            // Derive grammarStyle + text mode from capabilities (not from keys)
+            String grammarStyle = caps.showStyle() ? view.style.getValue() : "none";
+            WritingConfig.TextMode mode =
+                    caps.showTextMode()
+                            ? switch (view.textMode.getValue()) {
+                        case "summarize" -> WritingConfig.TextMode.SUMMARIZE;
+                        case "expand"    -> WritingConfig.TextMode.EXPAND;
+                        default          -> WritingConfig.TextMode.SAME;
+                    }
+                            : WritingConfig.TextMode.SUMMARIZE; // hide => treat as summarize (e.g., Code Docs)
 
             // Build config from UI (with the overrides above)
             WritingConfig cfg = new WritingConfig(
@@ -51,13 +58,15 @@ public class WritingController {
                     grammarStyle,
                     mode
             );
+
             model.applyConfig(cfg);
 
             // Compose final prompt = (translation instruction?) + preset instruction + user text
             String language = view.translateLang.getValue();
-            String langInstruction = (language != null && !language.equalsIgnoreCase("English"))
-                    ? "Write the final output in " + language + "."
-                    : "";
+            String langInstruction =
+                    (caps.showTranslation() && language != null && !language.equalsIgnoreCase("English"))
+                            ? "Write the final output in " + language + "."
+                            : "";
 
             String instruction = view.currentPresetInstruction().trim();
             String userText = view.input.getText();
@@ -92,7 +101,7 @@ public class WritingController {
 
         view.btnResetPreset.setOnAction(e -> view.resetActivePresetInstructionToDefault());
 
-        // Tab change → defaults + visibility
+        // Tab change → defaults + visibility from capabilities
         ChangeListener<Tab> tabListener = (obs, oldTab, newTab) -> {
             String key = view.currentPresetKey();
             applyPresetDefaultsAndVisibility(key);
@@ -101,15 +110,16 @@ public class WritingController {
     }
 
     private void applyPresetDefaultsAndVisibility(String key) {
-        // Defaults (temp/tone/style/text-mode)
-        var p = Presets.all().getOrDefault(key, Presets.all().get(Presets.GENERAL));
-        var c = p.defaults();
+        var all = PresetRegistry.all();
+        Preset preset = all.getOrDefault(key, all.values().iterator().next());
+        var c = preset.defaults();
 
+        // Apply default knobs
         view.temperature.setValue(c.temperature());
         switch (c.tone()) {
             case INFORMAL -> view.rbInformal.setSelected(true);
-            case FORMAL -> view.rbFormal.setSelected(true);
-            default -> view.rbNeutral.setSelected(true);
+            case FORMAL   -> view.rbFormal.setSelected(true);
+            default       -> view.rbNeutral.setSelected(true);
         }
         if (!view.style.getItems().contains(c.grammarStyle())) {
             view.style.getItems().add(c.grammarStyle());
@@ -117,29 +127,19 @@ public class WritingController {
         view.style.getSelectionModel().select(c.grammarStyle());
         switch (c.textMode()) {
             case SUMMARIZE -> view.textMode.getSelectionModel().select("summarize");
-            case EXPAND -> view.textMode.getSelectionModel().select("expand");
-            default -> view.textMode.getSelectionModel().select("same");
+            case EXPAND    -> view.textMode.getSelectionModel().select("expand");
+            default        -> view.textMode.getSelectionModel().select("same");
         }
 
-        // Visibility per preset
-        switch (key) {
-            case Presets.CREATIVE -> {
-                view.setStyleVisible(false);     // hide style
-                view.setTextModeVisible(true);   // keep text mode
-                view.setTranslationVisible(true);
-            }
-            case Presets.CODEDOC -> {
-                view.setStyleVisible(false);     // hide style
-                view.setTextModeVisible(false);  // hide text mode
-                view.setTranslationVisible(false); // hide translation for code docs
-                // Reset to English to avoid stale hidden state
-                view.translateLang.getSelectionModel().select("English");
-            }
-            default -> {
-                view.setStyleVisible(true);
-                view.setTextModeVisible(true);
-                view.setTranslationVisible(true); // general + professional + academic
-            }
+        // Toggle UI via capabilities
+        var caps = preset.capabilities();
+        view.setStyleVisible(caps.showStyle());
+        view.setTextModeVisible(caps.showTextMode());
+        view.setTranslationVisible(caps.showTranslation());
+
+        // Reset translation when hidden to avoid stale state
+        if (!caps.showTranslation()) {
+            view.translateLang.getSelectionModel().select("English");
         }
     }
 

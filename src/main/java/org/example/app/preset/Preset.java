@@ -2,17 +2,16 @@ package org.example.app.preset;
 
 import org.example.app.model.WritingConfig;
 
-/** A writing preset with defaults + an editable instruction template. */
+/** Strategy for a writing preset: defaults + instruction + UI capabilities. */
 public interface Preset {
-    /** Unique key used in the UI (tab id). */
+    /** Stable key (e.g., "general", "creative"). */
     String key();
-
-    /** Tab display title. */
+    /** Tab title. */
     String title();
-
-    /** Default config knobs for this preset. */
+    /** Default knobs for this preset. */
     WritingConfig defaults();
-
-    /** Default instruction text shown in the tab; user can edit it. */
+    /** Default editable instruction shown in the tab. */
     String defaultInstruction();
+    /** UI capabilities for toggling panels on/off. */
+    PresetCapabilities capabilities();
 }

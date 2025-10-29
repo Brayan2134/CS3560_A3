@@ -6,7 +6,8 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
-import org.example.app.preset.Presets;
+import org.example.app.preset.Preset;
+import org.example.app.preset.PresetRegistry;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -60,11 +61,11 @@ public class WritingView {
         HBox io = new HBox(10, leftBox, rightBox);
         io.setPadding(new Insets(10));
 
-        // ✅ Let the two columns grow inside the HBox
+        // Let the two columns grow inside the HBox
         HBox.setHgrow(leftBox, Priority.ALWAYS);
         HBox.setHgrow(rightBox, Priority.ALWAYS);
 
-        // ✅ Let the IO row grow inside the center VBox
+        // Let the IO row grow inside the center VBox
         VBox center = new VBox(8, io);
         VBox.setVgrow(io, Priority.ALWAYS);
         center.setPadding(new Insets(6));
@@ -158,7 +159,8 @@ public class WritingView {
         presetInstructionEditors.clear();
         tabs.getTabs().clear();
 
-        Presets.all().forEach((key, preset) -> {
+        // Build tabs from registry (order preserved)
+        PresetRegistry.all().forEach((key, preset) -> {
             TextArea instruction = new TextArea(preset.defaultInstruction().trim());
             instruction.setWrapText(true);
             instruction.setPrefRowCount(10);
@@ -186,7 +188,11 @@ public class WritingView {
     /** Current preset key (e.g., "general", "creative", etc.). */
     public String currentPresetKey() {
         Tab t = tabs.getSelectionModel().getSelectedItem();
-        return t != null ? t.getId() : Presets.GENERAL;
+        // fall back to first registered preset if needed
+        if (t == null) {
+            return PresetRegistry.all().keySet().iterator().next();
+        }
+        return t.getId();
     }
 
     /** Current instruction text for the active preset tab. */
@@ -199,7 +205,7 @@ public class WritingView {
     /** Reset the active tab's instruction to its default. */
     public void resetActivePresetInstructionToDefault() {
         String key = currentPresetKey();
-        var p = Presets.all().get(key);
+        Preset p = PresetRegistry.all().get(key);
         if (p != null) {
             TextArea ta = presetInstructionEditors.get(key);
             if (ta != null) ta.setText(p.defaultInstruction().trim());
@@ -211,7 +217,7 @@ public class WritingView {
         VBox box = new VBox(6, new Label(title), n);
         // Let the inner control grow to fill vertical space
         VBox.setVgrow(n, Priority.ALWAYS);
-        // Important: the wrapper VBox must be allowed to grow inside its parent HBox
+        // The wrapper VBox must be allowed to grow inside its parent HBox
         HBox.setHgrow(box, Priority.ALWAYS);
         return box;
     }
