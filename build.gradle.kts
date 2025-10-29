@@ -23,7 +23,7 @@ tasks.test {
 
 application {
     // demo entrypoint (you can change/remove)
-    mainClass.set("org.example.Main")
+    mainClass.set("org.example.app.MainApp")
 }
 
 tasks.named<JavaExec>("run") {
