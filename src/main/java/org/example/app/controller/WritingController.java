@@ -1,11 +1,13 @@
 package org.example.app.controller;
 
 import javafx.application.Platform;
+import javafx.beans.value.ChangeListener;
+import javafx.scene.control.Tab;
 import org.example.app.model.WritingConfig;
 import org.example.app.model.WritingModel;
+import org.example.app.preset.Presets;
 import org.example.app.view.WritingView;
 
-/** Glue: reads the view, builds config, calls model, updates view. */
 public class WritingController {
 
     private final WritingModel model;
@@ -15,11 +17,28 @@ public class WritingController {
         this.model = model;
         this.view = view;
         wire();
+        applyPresetDefaultsAndVisibility(view.currentPresetKey());
     }
 
     private void wire() {
         view.btnGenerate.setOnAction(e -> {
-            // 1) Build config from UI
+            String presetKey = view.currentPresetKey();
+
+            // Determine grammarStyle and textMode based on preset visibility/override rules
+            String grammarStyle = switch (presetKey) {
+                case Presets.CREATIVE, Presets.CODEDOC -> "none"; // ignore style for these presets
+                default -> view.style.getValue();
+            };
+            WritingConfig.TextMode mode = switch (presetKey) {
+                case Presets.CODEDOC -> WritingConfig.TextMode.SUMMARIZE; // lock to summarize
+                default -> switch (view.textMode.getValue()) {
+                    case "summarize" -> WritingConfig.TextMode.SUMMARIZE;
+                    case "expand"    -> WritingConfig.TextMode.EXPAND;
+                    default          -> WritingConfig.TextMode.SAME;
+                };
+            };
+
+            // Build config from UI (with the overrides above)
             WritingConfig cfg = new WritingConfig(
                     "gpt-4o-mini",
                     view.temperature.getValue(),
@@ -29,24 +48,24 @@ public class WritingController {
                         case "formal"   -> WritingConfig.Tone.FORMAL;
                         default         -> WritingConfig.Tone.NEUTRAL;
                     },
-                    view.style.getValue(),
-                    switch (view.textMode.getValue()) {
-                        case "summarize" -> WritingConfig.TextMode.SUMMARIZE;
-                        case "expand"    -> WritingConfig.TextMode.EXPAND;
-                        default          -> WritingConfig.TextMode.SAME;
-                    }
+                    grammarStyle,
+                    mode
             );
 
-            // 2) Apply config to model
             model.applyConfig(cfg);
 
-            // 3) Call model asynchronously
+            // final prompt = preset instruction + user text
+            String instruction = view.currentPresetInstruction().trim();
             String userText = view.input.getText();
+            String finalPrompt = instruction.isBlank()
+                    ? userText
+                    : instruction + "\n\n---\n\n" + userText;
+
             view.btnGenerate.setDisable(true);
-            view.status.setText("Requesting");
+            view.status.setText("Requesting…");
             view.output.clear();
 
-            model.generateAsync(userText).thenAccept(resultText ->
+            model.generateAsync(finalPrompt).thenAccept(resultText ->
                     Platform.runLater(() -> {
                         view.output.setText(resultText);
                         view.status.setText("Done");
@@ -61,6 +80,53 @@ public class WritingController {
                 return null;
             });
         });
+
+        view.btnResetPreset.setOnAction(e -> view.resetActivePresetInstructionToDefault());
+
+        // Tab change → defaults + visibility
+        ChangeListener<Tab> tabListener = (obs, oldTab, newTab) -> {
+            String key = view.currentPresetKey();
+            applyPresetDefaultsAndVisibility(key);
+        };
+        view.tabs.getSelectionModel().selectedItemProperty().addListener(tabListener);
+    }
+
+    private void applyPresetDefaultsAndVisibility(String key) {
+        // Defaults first (temp/tone/style/text-mode)
+        var p = Presets.all().getOrDefault(key, Presets.all().get(Presets.GENERAL));
+        var c = p.defaults();
+
+        view.temperature.setValue(c.temperature());
+        switch (c.tone()) {
+            case INFORMAL -> view.rbInformal.setSelected(true);
+            case FORMAL -> view.rbFormal.setSelected(true);
+            default -> view.rbNeutral.setSelected(true);
+        }
+        if (!view.style.getItems().contains(c.grammarStyle())) {
+            view.style.getItems().add(c.grammarStyle());
+        }
+        view.style.getSelectionModel().select(c.grammarStyle());
+        switch (c.textMode()) {
+            case SUMMARIZE -> view.textMode.getSelectionModel().select("summarize");
+            case EXPAND -> view.textMode.getSelectionModel().select("expand");
+            default -> view.textMode.getSelectionModel().select("same");
+        }
+
+        // Now visibility per preset
+        switch (key) {
+            case Presets.CREATIVE -> {
+                view.setStyleVisible(false);     // hide style
+                view.setTextModeVisible(true);   // keep text mode
+            }
+            case Presets.CODEDOC -> {
+                view.setStyleVisible(false);     // hide style
+                view.setTextModeVisible(false);  // hide text mode
+            }
+            default -> {
+                view.setStyleVisible(true);
+                view.setTextModeVisible(true);
+            }
+        }
     }
 
     private String selectedTone() {

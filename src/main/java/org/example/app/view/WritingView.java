@@ -6,12 +6,17 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import org.example.app.preset.Preset;
+import org.example.app.preset.Presets;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class WritingView {
 
     private final BorderPane root = new BorderPane();
 
-    // Left: input/output
+    // Shared Input/Output (left)
     public final TextArea input = new TextArea();
     public final TextArea output = new TextArea();
 
@@ -24,14 +29,21 @@ public class WritingView {
     public final ComboBox<String> style = new ComboBox<>();
     public final ComboBox<String> textMode = new ComboBox<>();
     public final Button btnGenerate = new Button("Generate");
+    public final Button btnResetPreset = new Button("Reset to preset");
     public final Label status = new Label("Idle");
+
+    // Tabs: one per preset
+    public final TabPane tabs = new TabPane();
+    private final Map<String, TextArea> presetInstructionEditors = new LinkedHashMap<>();
+
+    // Toggleable sections
+    public TitledPane stylePane;
+    public TitledPane textModePane;
 
     public WritingView() {
         // Text areas
         input.setPromptText("Type your text here…");
         output.setEditable(false);
-
-        // ✅ wrap-around for long lines
         input.setWrapText(true);
         output.setWrapText(true);
 
@@ -39,6 +51,9 @@ public class WritingView {
         io.setPadding(new Insets(10));
         HBox.setHgrow(input, Priority.ALWAYS);
         HBox.setHgrow(output, Priority.ALWAYS);
+
+        // Preset tabs (editable instruction boxes)
+        buildPresetTabs();
 
         // Tone radios
         rbInformal.setToggleGroup(toneGroup);
@@ -53,7 +68,7 @@ public class WritingView {
         textMode.getItems().addAll("summarize", "same", "expand");
         textMode.getSelectionModel().select("same");
 
-        // Temperature slider
+        // Temperature slider + custom axis + tooltip + live value
         temperature.setBlockIncrement(0.1);
         temperature.setMajorTickUnit(0.5);
         temperature.setShowTickMarks(true);
@@ -70,44 +85,106 @@ public class WritingView {
         );
         Tooltip.install(temperature, tempTip);
 
-        // Live numeric value
         Label tempValue = new Label();
-        tempValue.textProperty().bind(
-                javafx.beans.binding.Bindings.format("Current: %.2f", temperature.valueProperty())
-        );
-
-        // ✅ Custom axis labels below the slider
-        Label leftLbl  = new Label("Focus");
+        tempValue.textProperty().bind(Bindings.format("Current: %.2f", temperature.valueProperty()));
+        Label leftLbl  = new Label("0 (more focused)");
         Label midLbl   = new Label("balanced");
-        Label rightLbl = new Label("Creative");
-
-        // Use spacers to push labels to left / center / right
+        Label rightLbl = new Label("2 (more creative)");
         Region spacerL = new Region(); HBox.setHgrow(spacerL, Priority.ALWAYS);
         Region spacerR = new Region(); HBox.setHgrow(spacerR, Priority.ALWAYS);
-
         HBox axis = new HBox(8, leftLbl, spacerL, midLbl, spacerR, rightLbl);
         axis.setAlignment(Pos.BASELINE_LEFT);
-
-        // Group slider + axis + live value
         VBox tempBox = new VBox(6, temperature, axis, tempValue);
-        // Right control panel
+
+        // Build toggleable sections as titled panes so we can show/hide them
+        TitledPane tempPane = titled("Temperature", tempBox);
+        TitledPane tonePane = titled("Tone", new VBox(6, rbInformal, rbNeutral, rbFormal));
+        stylePane = titled("Style", style);
+        textModePane = titled("Text mode", textMode);
+
+        // Widen the presets area and right column
+        tabs.setTabMinWidth(80);
+        tabs.setTabMaxWidth(Double.MAX_VALUE);
+        tabs.setPrefWidth(560);
+        tabs.setMinWidth(560);
+        VBox.setVgrow(tabs, Priority.ALWAYS);
+
         VBox right = new VBox(12,
-                titled("Temperature", tempBox),
-                titled("Tone", new VBox(6, rbInformal, rbNeutral, rbFormal)),
-                titled("Style", style),
-                titled("Text mode", textMode),
+                new Label("Presets"),
+                tabs,
+                btnResetPreset,
+                new Separator(),
+                tempPane,
+                tonePane,
+                stylePane,
+                textModePane,
                 btnGenerate,
                 new Separator(),
                 status
         );
         right.setAlignment(Pos.TOP_LEFT);
         right.setPadding(new Insets(12));
-        right.setPrefWidth(260);
+        right.setPrefWidth(560); // wider than before
 
-        root.setCenter(io);
+        VBox center = new VBox(8, io);
+        center.setPadding(new Insets(6));
+        root.setCenter(center);
         root.setRight(right);
     }
 
+    private void buildPresetTabs() {
+        presetInstructionEditors.clear();
+        tabs.getTabs().clear();
+
+        Presets.all().forEach((key, preset) -> {
+            TextArea instruction = new TextArea(preset.defaultInstruction().trim());
+            instruction.setWrapText(true);
+            instruction.setPrefRowCount(10);     // taller editor
+            instruction.setPrefColumnCount(60);  // wider editor
+            VBox.setVgrow(instruction, Priority.ALWAYS);
+
+            VBox content = new VBox(8,
+                    new Label("Preset Prompt (editable):"),
+                    instruction
+            );
+            content.setPadding(new Insets(10));
+            Tab tab = new Tab(preset.title(), content);
+            tab.setId(preset.key());
+            tab.setClosable(false);
+
+            tabs.getTabs().add(tab);
+            presetInstructionEditors.put(key, instruction);
+        });
+
+        if (!tabs.getTabs().isEmpty()) {
+            tabs.getSelectionModel().select(0);
+        }
+    }
+
+    /** Current preset key (e.g., "general", "creative", etc.). */
+    public String currentPresetKey() {
+        Tab t = tabs.getSelectionModel().getSelectedItem();
+        return t != null ? t.getId() : Presets.GENERAL;
+    }
+
+    /** Current instruction text for the active preset tab. */
+    public String currentPresetInstruction() {
+        String key = currentPresetKey();
+        TextArea ta = presetInstructionEditors.get(key);
+        return ta != null ? ta.getText() : "";
+    }
+
+    /** Reset the active tab's instruction to its default. */
+    public void resetActivePresetInstructionToDefault() {
+        String key = currentPresetKey();
+        Preset p = Presets.all().get(key);
+        if (p != null) {
+            TextArea ta = presetInstructionEditors.get(key);
+            if (ta != null) ta.setText(p.defaultInstruction().trim());
+        }
+    }
+
+    // ——— helpers ———
     private Node wrap(String title, Node n) {
         VBox box = new VBox(6, new Label(title), n);
         VBox.setVgrow(n, Priority.ALWAYS);
@@ -118,6 +195,16 @@ public class WritingView {
         TitledPane tp = new TitledPane(title, content);
         tp.setExpanded(true);
         return tp;
+    }
+
+    // Public helpers so controller can toggle sections
+    public void setStyleVisible(boolean visible) {
+        stylePane.setManaged(visible);
+        stylePane.setVisible(visible);
+    }
+    public void setTextModeVisible(boolean visible) {
+        textModePane.setManaged(visible);
+        textModePane.setVisible(visible);
     }
 
     public BorderPane getRoot() { return root; }

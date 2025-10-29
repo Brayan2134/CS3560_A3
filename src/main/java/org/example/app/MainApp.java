@@ -15,7 +15,7 @@ public class MainApp extends Application {
         new WritingController(model, view);
 
         stage.setTitle("Intelligent Writing Assistant");
-        stage.setScene(new Scene(view.getRoot(), 1000, 600));
+        stage.setScene(new Scene(view.getRoot(), 1920, 1080));
         stage.show();
     }
 
