@@ -43,7 +43,7 @@ public class WritingController {
             // 3) Call model asynchronously
             String userText = view.input.getText();
             view.btnGenerate.setDisable(true);
-            view.status.setText("Requesting…");
+            view.status.setText("Requesting");
             view.output.clear();
 
             model.generateAsync(userText).thenAccept(resultText ->

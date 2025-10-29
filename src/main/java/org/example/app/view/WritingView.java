@@ -57,25 +57,39 @@ public class WritingView {
         temperature.setBlockIncrement(0.1);
         temperature.setMajorTickUnit(0.5);
         temperature.setShowTickMarks(true);
-        temperature.setShowTickLabels(true);
+        temperature.setShowTickLabels(false);
 
-        // ✅ helpful tooltip for temperature
         Tooltip tempTip = new Tooltip(
                 "Temperature controls randomness/creativity:\n" +
-                        "• 0.0 = deterministic (precise, consistent)\n" +
-                        "• 0.2–0.4 = formal/professional writing\n" +
-                        "• ~0.5 = balanced\n" +
-                        "• 0.6–0.8 = creative/varied phrasing\n" +
-                        "• 1.0+ = very playful, more surprising\n" +
+                        "0.0 = deterministic (precise, consistent)\n" +
+                        "0.2–0.4 = formal/professional writing\n" +
+                        "0.5 = balanced\n" +
+                        "0.6–0.8 = creative/varied phrasing\n" +
+                        "1.0+ = very playful, more surprising\n" +
                         "Tip: lower for summaries & formal docs; higher for brainstorming."
         );
         Tooltip.install(temperature, tempTip);
 
-        // ✅ small label showing the live numeric value
+        // Live numeric value
         Label tempValue = new Label();
-        tempValue.textProperty().bind(Bindings.format("Current: %.2f", temperature.valueProperty()));
-        VBox tempBox = new VBox(6, temperature, tempValue);
+        tempValue.textProperty().bind(
+                javafx.beans.binding.Bindings.format("Current: %.2f", temperature.valueProperty())
+        );
 
+        // ✅ Custom axis labels below the slider
+        Label leftLbl  = new Label("Focus");
+        Label midLbl   = new Label("balanced");
+        Label rightLbl = new Label("Creative");
+
+        // Use spacers to push labels to left / center / right
+        Region spacerL = new Region(); HBox.setHgrow(spacerL, Priority.ALWAYS);
+        Region spacerR = new Region(); HBox.setHgrow(spacerR, Priority.ALWAYS);
+
+        HBox axis = new HBox(8, leftLbl, spacerL, midLbl, spacerR, rightLbl);
+        axis.setAlignment(Pos.BASELINE_LEFT);
+
+        // Group slider + axis + live value
+        VBox tempBox = new VBox(6, temperature, axis, tempValue);
         // Right control panel
         VBox right = new VBox(12,
                 titled("Temperature", tempBox),
