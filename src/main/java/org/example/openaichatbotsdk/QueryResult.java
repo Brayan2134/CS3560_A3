@@ -1,7 +1,7 @@
 package org.example.openaichatbotsdk;
 
 public class QueryResult {
-    public enum Status { PENDING, COMPLETE, ERROR }
+    public enum Status { PENDING, COMPLETE, ERROR } //Lifecycle states for a model response.
 
     private final Status status;
     private final String text;
