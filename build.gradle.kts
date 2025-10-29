@@ -1,6 +1,7 @@
 plugins {
     id("java")
     id("application")
+    id("org.openjfx.javafxplugin") version "0.1.0"
 }
 
 group = "org.example"
@@ -29,4 +30,8 @@ tasks.named<JavaExec>("run") {
     // Forward your system env var explicitly into the Gradle run environment
     val key = System.getenv("OPENAI_API_KEY") ?: ""
     environment("OPENAI_API_KEY", key)
+}
+
+javafx {
+    modules("javafx.controls", "javafx.fxml")
 }
