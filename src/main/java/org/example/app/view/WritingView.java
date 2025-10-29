@@ -1,12 +1,12 @@
 package org.example.app.view;
 
+import javafx.beans.binding.Bindings;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 
-/** Builds the UI and exposes controls to the controller. */
 public class WritingView {
 
     private final BorderPane root = new BorderPane();
@@ -31,6 +31,10 @@ public class WritingView {
         input.setPromptText("Type your text here…");
         output.setEditable(false);
 
+        // ✅ wrap-around for long lines
+        input.setWrapText(true);
+        output.setWrapText(true);
+
         HBox io = new HBox(10, wrap("Input", input), wrap("Output", output));
         io.setPadding(new Insets(10));
         HBox.setHgrow(input, Priority.ALWAYS);
@@ -49,15 +53,32 @@ public class WritingView {
         textMode.getItems().addAll("summarize", "same", "expand");
         textMode.getSelectionModel().select("same");
 
-        // Temperature
+        // Temperature slider
         temperature.setBlockIncrement(0.1);
         temperature.setMajorTickUnit(0.5);
         temperature.setShowTickMarks(true);
         temperature.setShowTickLabels(true);
 
+        // ✅ helpful tooltip for temperature
+        Tooltip tempTip = new Tooltip(
+                "Temperature controls randomness/creativity:\n" +
+                        "• 0.0 = deterministic (precise, consistent)\n" +
+                        "• 0.2–0.4 = formal/professional writing\n" +
+                        "• ~0.5 = balanced\n" +
+                        "• 0.6–0.8 = creative/varied phrasing\n" +
+                        "• 1.0+ = very playful, more surprising\n" +
+                        "Tip: lower for summaries & formal docs; higher for brainstorming."
+        );
+        Tooltip.install(temperature, tempTip);
+
+        // ✅ small label showing the live numeric value
+        Label tempValue = new Label();
+        tempValue.textProperty().bind(Bindings.format("Current: %.2f", temperature.valueProperty()));
+        VBox tempBox = new VBox(6, temperature, tempValue);
+
         // Right control panel
         VBox right = new VBox(12,
-                titled("Temperature", temperature),
+                titled("Temperature", tempBox),
                 titled("Tone", new VBox(6, rbInformal, rbNeutral, rbFormal)),
                 titled("Style", style),
                 titled("Text mode", textMode),
