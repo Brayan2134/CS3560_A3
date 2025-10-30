@@ -10,7 +10,13 @@ import org.example.app.preset.PresetCapabilities;
 import org.example.app.preset.PresetRegistry;
 import org.example.app.view.WritingView;
 
-/** Glue: reads the view, builds config, applies preset defaults, calls model. */
+/**
+ * Controller orchestrates:
+ *  - reacts to tab changes,
+ *  - applies preset defaults,
+ *  - reads current UI selections from the view,
+ *  - builds WritingConfig and calls the model.
+ */
 public class WritingController {
 
     private final WritingModel model;
@@ -20,132 +26,147 @@ public class WritingController {
         this.model = model;
         this.view = view;
         wire();
-        applyPresetDefaultsAndVisibility(view.currentPresetKey());
+        // Initialize to the first preset
+        applyPresetDefaults(view.currentPresetKey());
     }
 
     private void wire() {
-        // Generate
-        view.btnGenerate.setOnAction(e -> {
-            String presetKey = view.currentPresetKey();
-            Preset preset = PresetRegistry.all().get(presetKey);
-            if (preset == null) {
-                // fallback to first preset if somehow missing
-                preset = PresetRegistry.all().values().iterator().next();
-            }
-            PresetCapabilities caps = preset.capabilities();
+        // Generate button
+        view.btnGenerate.setOnAction(e -> onGenerate());
 
-            // Derive grammarStyle + text mode from capabilities (not from keys)
-            String grammarStyle = caps.showStyle() ? view.style.getValue() : "none";
-            WritingConfig.TextMode mode =
-                    caps.showTextMode()
-                            ? switch (view.textMode.getValue()) {
-                        case "summarize" -> WritingConfig.TextMode.SUMMARIZE;
-                        case "expand"    -> WritingConfig.TextMode.EXPAND;
-                        default          -> WritingConfig.TextMode.SAME;
-                    }
-                            : WritingConfig.TextMode.SUMMARIZE; // hide => treat as summarize (e.g., Code Docs)
-
-            // Build config from UI (with the overrides above)
-            WritingConfig cfg = new WritingConfig(
-                    "gpt-4o-mini",
-                    view.temperature.getValue(),
-                    800,
-                    switch (selectedTone()) {
-                        case "informal" -> WritingConfig.Tone.INFORMAL;
-                        case "formal"   -> WritingConfig.Tone.FORMAL;
-                        default         -> WritingConfig.Tone.NEUTRAL;
-                    },
-                    grammarStyle,
-                    mode
-            );
-
-            model.applyConfig(cfg);
-
-            // Compose final prompt = (translation instruction?) + preset instruction + user text
-            String language = view.translateLang.getValue();
-            String langInstruction =
-                    (caps.showTranslation() && language != null && !language.equalsIgnoreCase("English"))
-                            ? "Write the final output in " + language + "."
-                            : "";
-
-            String instruction = view.currentPresetInstruction().trim();
-            String userText = view.input.getText();
-
-            String combinedInstruction = instruction.isBlank()
-                    ? langInstruction
-                    : (langInstruction.isBlank() ? instruction : (langInstruction + "\n" + instruction));
-
-            String finalPrompt = combinedInstruction.isBlank()
-                    ? userText
-                    : combinedInstruction + "\n\n---\n\n" + userText;
-
-            view.btnGenerate.setDisable(true);
-            view.status.setText("Requesting…");
-            view.output.clear();
-
-            model.generateAsync(finalPrompt).thenAccept(resultText ->
-                    Platform.runLater(() -> {
-                        view.output.setText(resultText);
-                        view.status.setText("Done");
-                        view.btnGenerate.setDisable(false);
-                    })
-            ).exceptionally(ex -> {
-                Platform.runLater(() -> {
-                    view.output.setText("[Error] " + ex.getMessage());
-                    view.status.setText("Error");
-                    view.btnGenerate.setDisable(false);
-                });
-                return null;
-            });
+        // Reset to preset defaults (for current tab)
+        view.btnResetPreset.setOnAction(e -> {
+            view.resetActivePresetInstructionToDefault();
+            applyPresetDefaults(view.currentPresetKey());
         });
 
-        view.btnResetPreset.setOnAction(e -> view.resetActivePresetInstructionToDefault());
-
-        // Tab change → defaults + visibility from capabilities
+        // Tab change -> rebuild right column (view) + apply defaults
         ChangeListener<Tab> tabListener = (obs, oldTab, newTab) -> {
             String key = view.currentPresetKey();
-            applyPresetDefaultsAndVisibility(key);
+            view.onPresetChanged(key);      // view composes sections for this preset
+            applyPresetDefaults(key);       // set defaults into the sections
         };
-        view.tabs.getSelectionModel().selectedItemProperty().addListener(tabListener);
+        view.presetTabs.getTabs().getSelectionModel().selectedItemProperty().addListener(tabListener);
     }
 
-    private void applyPresetDefaultsAndVisibility(String key) {
+    /** Sets section values from the preset's defaults. */
+    private void applyPresetDefaults(String presetKey) {
         var all = PresetRegistry.all();
-        Preset preset = all.getOrDefault(key, all.values().iterator().next());
-        var c = preset.defaults();
+        Preset preset = all.getOrDefault(presetKey, all.values().iterator().next());
 
-        // Apply default knobs
-        view.temperature.setValue(c.temperature());
-        switch (c.tone()) {
-            case INFORMAL -> view.rbInformal.setSelected(true);
-            case FORMAL   -> view.rbFormal.setSelected(true);
-            default       -> view.rbNeutral.setSelected(true);
+        var d = preset.defaults();
+        // Temperature
+        view.setTemperature(d.temperature());
+        // Tone
+        switch (d.tone()) {
+            case INFORMAL -> view.setTone("informal");
+            case FORMAL   -> view.setTone("formal");
+            default       -> view.setTone("neutral");
         }
-        if (!view.style.getItems().contains(c.grammarStyle())) {
-            view.style.getItems().add(c.grammarStyle());
+        // Style
+        view.setStyle(d.grammarStyle());
+        // Text mode
+        switch (d.textMode()) {
+            case SUMMARIZE -> view.setTextMode("summarize");
+            case EXPAND    -> view.setTextMode("expand");
+            default        -> view.setTextMode("same");
         }
-        view.style.getSelectionModel().select(c.grammarStyle());
-        switch (c.textMode()) {
-            case SUMMARIZE -> view.textMode.getSelectionModel().select("summarize");
-            case EXPAND    -> view.textMode.getSelectionModel().select("expand");
-            default        -> view.textMode.getSelectionModel().select("same");
-        }
-
-        // Toggle UI via capabilities
-        var caps = preset.capabilities();
-        view.setStyleVisible(caps.showStyle());
-        view.setTextModeVisible(caps.showTextMode());
-        view.setTranslationVisible(caps.showTranslation());
-
-        // Reset translation when hidden to avoid stale state
-        if (!caps.showTranslation()) {
-            view.translateLang.getSelectionModel().select("English");
+        // Language: normalize to English when a preset does not expose translation
+        if (!preset.capabilities().showTranslation()) {
+            view.setLanguage("English");
         }
     }
 
-    private String selectedTone() {
-        if (view.rbInformal.isSelected()) return "informal";
-        if (view.rbFormal.isSelected()) return "formal";
-        return "neutral";
+    /** Reads UI → builds config → calls model → updates output. */
+    private void onGenerate() {
+        String presetKey = view.currentPresetKey();
+        Preset preset = PresetRegistry.all().getOrDefault(
+                presetKey, PresetRegistry.all().values().iterator().next()
+        );
+        PresetCapabilities caps = preset.capabilities();
+
+        // Read current UI selections from the decoupled view
+        double temperature = view.getTemperature();
+
+        WritingConfig.Tone tone = switch (safe(view.getToneKey())) {
+            case "informal" -> WritingConfig.Tone.INFORMAL;
+            case "formal"   -> WritingConfig.Tone.FORMAL;
+            default         -> WritingConfig.Tone.NEUTRAL;
+        };
+
+        // Capabilities drive overrides: if a section is hidden, force sensible values
+        String grammarStyle = caps.showStyle() ? safe(view.getStyleKey()) : "none";
+
+        WritingConfig.TextMode textMode =
+                caps.showTextMode()
+                        ? switch (safe(view.getTextModeKey())) {
+                    case "summarize" -> WritingConfig.TextMode.SUMMARIZE;
+                    case "expand"    -> WritingConfig.TextMode.EXPAND;
+                    default          -> WritingConfig.TextMode.SAME;
+                }
+                        : WritingConfig.TextMode.SUMMARIZE; // hidden (e.g., Code Docs) → summarize behavior
+
+        // Build config (model id and max tokens are arbitrary defaults you can expose later if you want)
+        WritingConfig cfg = new WritingConfig(
+                "gpt-4o-mini",
+                temperature,
+                800,
+                tone,
+                grammarStyle,
+                textMode
+        );
+        model.applyConfig(cfg);
+
+        // Compose final prompt:
+        //   [optional translation instruction] + [preset instruction] + [user text]
+        String language = caps.showTranslation() ? safe(view.getLanguage()) : "English";
+        String transInstruction = (!"English".equalsIgnoreCase(language))
+                ? "Write the final output in " + language + "."
+                : "";
+
+        String instruction = presetInstructionOrEmpty();
+        String userText = safe(view.input.getText());
+
+        String header = combineNonBlank(transInstruction, instruction);
+        String finalPrompt = header.isBlank() ? userText : header + "\n\n---\n\n" + userText;
+
+        // Call model
+        view.btnGenerate.setDisable(true);
+        view.status.setText("Requesting…");
+        view.output.clear();
+
+        model.generateAsync(finalPrompt).thenAccept(text ->
+                Platform.runLater(() -> {
+                    view.output.setText(text);
+                    view.status.setText("Done");
+                    view.btnGenerate.setDisable(false);
+                })
+        ).exceptionally(ex -> {
+            Platform.runLater(() -> {
+                view.output.setText("[Error] " + ex.getMessage());
+                view.status.setText("Error");
+                view.btnGenerate.setDisable(false);
+            });
+            return null;
+        });
+    }
+
+    // ——— helpers ———
+
+    private String presetInstructionOrEmpty() {
+        String s = safe(view.currentPresetInstruction()).trim();
+        return s;
+    }
+
+    private static String safe(String s) { return s == null ? "" : s; }
+
+    /** Combines two strings with a newline if both are non-blank. */
+    private static String combineNonBlank(String a, String b) {
+        boolean A = a != null && !a.isBlank();
+        boolean B = b != null && !b.isBlank();
+        if (A && B) return a + "\n" + b;
+        if (A) return a;
+        if (B) return b;
+        return "";
     }
 }
