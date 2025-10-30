@@ -15,6 +15,7 @@ import org.example.app.preset.PresetCapabilities;
 import org.example.app.preset.PresetRegistry;
 import org.example.app.view.WritingView;
 import org.example.app.persistence.*;
+import org.example.app.util.*;
 
 import java.io.File;
 import java.lang.reflect.Method;
@@ -24,8 +25,13 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
-public class WritingController {
+import javafx.animation.PauseTransition;
+import javafx.util.Duration;
 
+public class WritingController {
+    private final SuggestionEngine engine = SuggestionEngine.loadDefaultEnglish();
+    private final PauseTransition inputDebounce = new PauseTransition(Duration.millis(150));
+    private final PauseTransition outputDebounce = new PauseTransition(Duration.millis(150));
     private final WritingModel model;
     private final WritingView view;
 
@@ -52,6 +58,38 @@ public class WritingController {
         wireUI();
         openOrCreateSession();  // <<— TRY TO RESTORE LAST SESSION
         applyPresetDefaults(view.currentPresetKey());
+    }
+
+    private void wireStatsAndSuggestions() {
+        view.input.textProperty().addListener((obs, o, n) -> {
+            inputDebounce.setOnFinished(e -> {
+                updateStats(n, true);
+                updateSuggestions(n);
+            });
+            inputDebounce.playFromStart();
+        });
+        view.output.textProperty().addListener((obs, o, n) -> {
+            outputDebounce.setOnFinished(e -> updateStats(n, false));
+            outputDebounce.playFromStart();
+        });
+        // initial
+        updateStats(view.input.getText(), true);
+        updateStats(view.output.getText(), false);
+        updateSuggestions(view.input.getText());
+    }
+
+    private void updateSuggestions(String txt) {
+        var list = engine.analyze(txt);
+        view.setSuggestions(list);
+    }
+
+    private void updateStats(String txt, boolean forInput) {
+        int w = TextStats.words(txt);
+        int s = TextStats.sentences(txt);
+        double fre = TextStats.fleschReadingEase(txt);
+        double fk  = TextStats.fkGradeLevel(txt);
+        String msg = String.format("Words: %d • Sentences: %d • FRE: %.1f • FKGL: %.1f", w, s, fre, fk);
+        if (forInput) view.inputStats.setText(msg); else view.outputStats.setText(msg);
     }
 
     private void wireUI() {
@@ -147,6 +185,7 @@ public class WritingController {
     private void newSession() {
         try {
             currentSessionId = sessions.createSession("Session " + Instant.now());
+            view.resetForNewSession();
             lastSession.write(currentSessionId);
             view.status.setText("New session created.");
         } catch (Exception e) {
