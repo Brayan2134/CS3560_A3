@@ -15,6 +15,8 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     implementation("com.google.code.gson:gson:2.13.2")
+    implementation("com.github.librepdf:openpdf:3.0.0")
+    implementation("com.lowagie:itext:2.1.7")
 }
 
 tasks.test {

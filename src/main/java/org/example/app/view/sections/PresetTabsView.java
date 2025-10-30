@@ -60,6 +60,8 @@ public class PresetTabsView implements SectionView {
         }
     }
 
+    public void setCurrentInstruction(String text) { editors.get(currentKey()).setText(text); }
+
     public TabPane getTabs() { return tabs; }
     @Override public Node getNode() { return tabs; }
 }
