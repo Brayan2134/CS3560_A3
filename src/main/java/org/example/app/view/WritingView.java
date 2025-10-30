@@ -19,6 +19,10 @@ import org.example.app.view.sections.TextModeSection;
 import org.example.app.view.sections.TranslateSection;
 import org.example.app.util.*;
 
+import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.Tooltip;
+
 import java.util.List;
 
 /**
@@ -136,6 +140,29 @@ public class WritingView implements SectionEvents {
         suggestionsList.setPrefHeight(150);
         rightColumn.getChildren().addAll(new Label("Suggestions"), suggestionsList);
 
+        suggestionsList.setPlaceholder(new Label("No suggestions"));
+        suggestionsList.setCellFactory(lv -> new ListCell<Suggestion>() {
+            @Override protected void updateItem(Suggestion s, boolean empty) {
+                super.updateItem(s, empty);
+                if (empty || s == null) { setText(null); setTooltip(null); return; }
+                setText(s.getTitle());
+                setTooltip(new Tooltip(s.getDetail()));
+            }
+        });
+
+        // Click a suggestion -> select the offending text in the input area
+        suggestionsList.getSelectionModel().selectedItemProperty().addListener((obs, old, s) -> {
+            if (s == null) return;
+            input.requestFocus();
+            input.selectRange(s.getStart(), s.getEnd());
+        });
+
+        // Keep suggestions in sync with the input text
+        input.textProperty().addListener((obs, old, n) -> refreshSuggestions(n));
+
+        // Initial compute (handles freshly opened view with any existing text)
+        refreshSuggestions(input.getText());
+
         HBox genBox = new HBox(btnGenerate);
         genBox.setSpacing(8);
         rightColumn.getChildren().add(genBox);
@@ -174,16 +201,29 @@ public class WritingView implements SectionEvents {
     }
 
     // ===== helpers =====
-    private TitledPane titled(String title, Node content) {
-        TitledPane tp = new TitledPane(title, content);
-        tp.setExpanded(true);
-        return tp;
-    }
 
     private VBox labeledBox(String title, Node n) {
         Label lbl = new Label(title);
         lbl.setStyle("-fx-font-weight: bold;");
         return new VBox(6, lbl, n);
+    }
+
+    // Add this helper
+    private Node titled(String title, Node content) {
+        if (content instanceof TitledPane) {
+            // Section already provides its own titled container — use it directly.
+            return content;
+        }
+        TitledPane tp = new TitledPane(title, content);
+        tp.setCollapsible(true);
+        tp.setExpanded(true);
+        return tp;
+    }
+
+
+    /** Recompute suggestions for the given text and refresh the list. */
+    private void refreshSuggestions(String text) {
+        suggestionsList.getItems().setAll(SuggestionEngine.suggest(text));
     }
 
     // ===== SectionEvents callbacks (update local state) =====

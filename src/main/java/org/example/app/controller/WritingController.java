@@ -29,7 +29,6 @@ import javafx.animation.PauseTransition;
 import javafx.util.Duration;
 
 public class WritingController {
-    private final SuggestionEngine engine = SuggestionEngine.loadDefaultEnglish();
     private final PauseTransition inputDebounce = new PauseTransition(Duration.millis(150));
     private final PauseTransition outputDebounce = new PauseTransition(Duration.millis(150));
     private final WritingModel model;
@@ -79,7 +78,7 @@ public class WritingController {
     }
 
     private void updateSuggestions(String txt) {
-        var list = engine.analyze(txt);
+        var list = SuggestionEngine.suggest(txt);
         view.setSuggestions(list);
     }
 
