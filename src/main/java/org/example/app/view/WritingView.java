@@ -22,6 +22,7 @@ import org.example.app.util.*;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.Tooltip;
+import javafx.scene.control.TitledPane;
 
 import java.util.List;
 
@@ -123,6 +124,12 @@ public class WritingView implements SectionEvents {
         VBox rightColumn = new VBox(10);
         rightColumn.setPadding(new Insets(10));
         rightColumn.setFillWidth(true);
+        rightColumn.setMaxWidth(420);  // clamp right pane width
+
+        // Wrap suggestions UI into a container we can hide without breaking functionality
+        VBox suggestionsBox = new VBox(6, new Label("Suggestions"), suggestionsList);
+        suggestionsBox.setVisible(false); // hide from UI
+        suggestionsBox.setManaged(false); // remove from layout sizing so it doesn't reserve space
 
         Node presetTabsNode = presetTabs.getNode();
 
@@ -138,9 +145,8 @@ public class WritingView implements SectionEvents {
 
         suggestionsList.setPlaceholder(new Label("No suggestions"));
         suggestionsList.setPrefHeight(150);
-        rightColumn.getChildren().addAll(new Label("Suggestions"), suggestionsList);
+        rightColumn.getChildren().add(suggestionsBox);
 
-        suggestionsList.setPlaceholder(new Label("No suggestions"));
         suggestionsList.setCellFactory(lv -> new ListCell<Suggestion>() {
             @Override protected void updateItem(Suggestion s, boolean empty) {
                 super.updateItem(s, empty);
@@ -169,9 +175,17 @@ public class WritingView implements SectionEvents {
 
         ScrollPane rightScroll = new ScrollPane(rightColumn);
         rightScroll.setFitToWidth(true);
-        rightScroll.setPrefViewportWidth(440);
-        rightScroll.setMinViewportWidth(420);
+        rightScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+
+        // These two actually clamp the BorderPane right region:
+        rightScroll.setPrefWidth(420);
+        rightScroll.setMaxWidth(420);
+
+        // This is optional, but keeps the viewport consistent
+        rightScroll.setPrefViewportWidth(420);
+
         root.setRight(rightScroll);
+
 
         // Bottom status
         HBox statusBar = new HBox(status);
@@ -201,6 +215,11 @@ public class WritingView implements SectionEvents {
     }
 
     // ===== helpers =====
+
+    static void clampWidth(Region r, double w) {
+        r.setMaxWidth(w);
+        r.setPrefWidth(w);
+    }
 
     private VBox labeledBox(String title, Node n) {
         Label lbl = new Label(title);

@@ -7,6 +7,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import org.example.app.preset.Preset;
 import org.example.app.preset.PresetRegistry;
+import javafx.scene.layout.Region;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -18,8 +19,8 @@ public class PresetTabsView implements SectionView {
     public PresetTabsView() {
         tabs.setTabMinWidth(100);
         tabs.setTabMaxWidth(Double.MAX_VALUE);
-        tabs.setPrefWidth(640);
-        tabs.setMinWidth(640);
+        tabs.setPrefWidth(400);
+        tabs.setMinWidth(40);
         VBox.setVgrow(tabs, Priority.ALWAYS);
 
         PresetRegistry.all().forEach((k, p) -> {
