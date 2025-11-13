@@ -71,7 +71,7 @@ public class WritingController {
         this.view = view;
 
         // NEW: default engine (swap later for a real provider)
-        this.suggest = new CompositeSuggestionEngine(new FakeSpellEngine());
+        this.suggest = new CompositeSuggestionEngine(new LanguageToolSuggestionEngine("en-US"));
 
         wireUI();
         openOrCreateSession();

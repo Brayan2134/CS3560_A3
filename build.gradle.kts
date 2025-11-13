@@ -17,7 +17,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.13.2")
     implementation("com.github.librepdf:openpdf:3.0.0")
     implementation("com.lowagie:itext:2.1.7")
-    implementation("org.languagetool:language-en:5.9")
+    implementation("org.languagetool:language-en:6.6")
     implementation("org.fxmisc.richtext:richtextfx:0.11.0")
 }
 
