@@ -46,9 +46,6 @@ to their specific use-case.
 - Observer (UI Callbacks): `view/sections/SectionEvents`
   - Where:Sections notify the host view via `onTemperatureChanged`, `onToneChanged`, etc
   - Why: Decouples each section from the rest of the UI; the view/controller can react without tight coupling
-- Factory: `view/sections/SectionFactory`
-  - Where: Builds the set of right-pane sections based on preset capabilities
-  - Why: Centralizes creation logic and avoids scattered if/else blocks when presets change
 
 # YouTube Video
 [Video Link](https://youtu.be/5VYqxMmWgww)
