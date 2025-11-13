@@ -40,8 +40,8 @@ public class WritingView implements SectionEvents {
     private boolean liveStatsWired = false;
 
     // Stats labels (controller updates these)
-    public final Label inputStats  = new Label("Words: 0  Sentences: 0  FRE: -  FKGL: -");
-    public final Label outputStats = new Label("Words: 0  Sentences: 0  FRE: -  FKGL: -");
+    public final Label inputStats  = new Label("Words: 0   Sentences: 0   FRE: -   FKGL: -");
+    public final Label outputStats = new Label("Words: 0   Sentences: 0   FRE: -   FKGL: -");
 
     // Suggestions list (now just strings for display)
     private final ListView<String> suggestionsList = new ListView<>();
@@ -84,7 +84,7 @@ public class WritingView implements SectionEvents {
         // ---- Editors ----
         input.setWrapText(true);
         output.setWrapText(true);
-        input.setPromptText("Type or paste your text here…");
+        input.setPromptText("Type or paste your text here!");
         output.setEditable(false);
 
         // Ctrl+Enter triggers Generate
@@ -330,8 +330,8 @@ public class WritingView implements SectionEvents {
         clearSuggestions();
         updateInputStats("");
         updateOutputStats("");
-        inputStats.setText("Words: 0  •  Sentences: 0  •  FRE: —  •  FKGL: —");
-        outputStats.setText("Words: 0  •  Sentences: 0  •  FRE: —  •  FKGL: —");
+        inputStats.setText("Words: 0    Sentences: 0    FRE: -    FKGL: -");
+        outputStats.setText("Words: 0   Sentences: 0   FRE: -  FKGL: -");
         status.setText("Session created.");
     }
 
@@ -354,7 +354,7 @@ public class WritingView implements SectionEvents {
     private String formatStats(int words, int sentences, Double fre, Double fkgl) {
         String freS  = (fre  == null ? "—" : String.format("%.1f", fre));
         String fkglS = (fkgl == null ? "—" : String.format("%.1f", fkgl));
-        return String.format("Words: %d  •  Sentences: %d  •  FRE: %s  •  FKGL: %s",
+        return String.format("Words: %d   Sentences: %d   FRE: %s   FKGL: %s",
                 words, sentences, freS, fkglS);
     }
 

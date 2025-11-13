@@ -128,7 +128,7 @@ public class WritingController {
         int s = TextStats.sentences(txt);
         double fre = TextStats.fleschReadingEase(txt);
         double fk  = TextStats.fkGradeLevel(txt);
-        String msg = String.format("Words: %d • Sentences: %d • FRE: %.1f • FKGL: %.1f", w, s, fre, fk);
+        String msg = String.format("Words: %d   Sentences: %d   FRE: %.1f   FKGL: %.1f", w, s, fre, fk);
         if (forInput) view.inputStats.setText(msg); else view.outputStats.setText(msg);
     }
 
@@ -167,10 +167,10 @@ public class WritingController {
     private void installMenu() {
         Menu file = new Menu("File");
         MenuItem mNew = new MenuItem("New Session (Ctrl+N)");
-        MenuItem mOpen = new MenuItem("Open Session… (Ctrl+O)");
+        MenuItem mOpen = new MenuItem("Open Session (Ctrl+O)");
         MenuItem mSave = new MenuItem("Save Revision (Ctrl+S)");
         MenuItem mHist = new MenuItem("History (Ctrl+H)");
-        MenuItem mExport = new MenuItem("Export… (Ctrl+E)");
+        MenuItem mExport = new MenuItem("Export (Ctrl+E)");
         file.getItems().addAll(mNew, mOpen, new SeparatorMenuItem(), mSave, mHist, new SeparatorMenuItem(), mExport);
 
         mNew.setOnAction(e -> newSession());
