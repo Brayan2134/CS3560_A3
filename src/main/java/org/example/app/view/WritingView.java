@@ -9,7 +9,7 @@ import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.*;
 import javafx.stage.Screen;
 
-import org.example.app.util.Suggestion;
+import org.example.app.suggest.SuggestionIssue;
 import org.example.app.view.sections.PresetTabsView;
 import org.example.app.view.sections.SectionEvents;
 import org.example.app.view.sections.TemperatureSection;
@@ -17,14 +17,9 @@ import org.example.app.view.sections.ToneSection;
 import org.example.app.view.sections.StyleSection;
 import org.example.app.view.sections.TextModeSection;
 import org.example.app.view.sections.TranslateSection;
-import org.example.app.util.*;
-
-import javafx.scene.control.Label;
-import javafx.scene.control.ListCell;
-import javafx.scene.control.Tooltip;
-import javafx.scene.control.TitledPane;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * WritingView — minimal changes to satisfy WritingController and add stats/suggestions.
@@ -34,7 +29,7 @@ import java.util.List;
  *    currentPresetKey(), currentPresetInstruction(),
  *    resetActivePresetInstructionToDefault(),
  *    onPresetChanged(), onPresetChanged(String),
- *    setSuggestions(List<Suggestion>),
+ *    setSuggestions(List<...>)  (controller no longer uses this; showSuggestions is preferred),
  *    setTemperature(double), setTone(String), setStyle(String), setTextMode(String), setLanguage(String)
  */
 public class WritingView implements SectionEvents {
@@ -48,8 +43,8 @@ public class WritingView implements SectionEvents {
     public final Label inputStats  = new Label("Words: 0  Sentences: 0  FRE: -  FKGL: -");
     public final Label outputStats = new Label("Words: 0  Sentences: 0  FRE: -  FKGL: -");
 
-    // Suggestions list (controller fills via setSuggestions)
-    private final ListView<Suggestion> suggestionsList = new ListView<>();
+    // Suggestions list (now just strings for display)
+    private final ListView<String> suggestionsList = new ListView<>();
 
     // Status + actions
     public final Label  status = new Label("Ready.");
@@ -128,8 +123,8 @@ public class WritingView implements SectionEvents {
 
         // Wrap suggestions UI into a container we can hide without breaking functionality
         VBox suggestionsBox = new VBox(6, new Label("Suggestions"), suggestionsList);
-        suggestionsBox.setVisible(false); // hide from UI
-        suggestionsBox.setManaged(false); // remove from layout sizing so it doesn't reserve space
+        suggestionsBox.setVisible(false); // hidden by default (you can flip to true later)
+        suggestionsBox.setManaged(false); // don't reserve layout space while hidden
 
         Node presetTabsNode = presetTabs.getNode();
 
@@ -147,27 +142,16 @@ public class WritingView implements SectionEvents {
         suggestionsList.setPrefHeight(150);
         rightColumn.getChildren().add(suggestionsBox);
 
-        suggestionsList.setCellFactory(lv -> new ListCell<Suggestion>() {
-            @Override protected void updateItem(Suggestion s, boolean empty) {
-                super.updateItem(s, empty);
-                if (empty || s == null) { setText(null); setTooltip(null); return; }
-                setText(s.getTitle());
-                setTooltip(new Tooltip(s.getDetail()));
+        // Clicking a row selects the span IN THE INPUT editor.
+        suggestionsList.setOnMouseClicked(e -> {
+            int idx = suggestionsList.getSelectionModel().getSelectedIndex();
+            if (idx >= 0 && idx < suggestionsList.getItems().size()) {
+                // The controller calls showSuggestions(...) which keeps its own mapping
+                // via a captured list; selection is handled there. Here we just ensure
+                // the control exists and can be focused.
+                input.requestFocus();
             }
         });
-
-        // Click a suggestion -> select the offending text in the input area
-        suggestionsList.getSelectionModel().selectedItemProperty().addListener((obs, old, s) -> {
-            if (s == null) return;
-            input.requestFocus();
-            input.selectRange(s.getStart(), s.getEnd());
-        });
-
-        // Keep suggestions in sync with the input text
-        input.textProperty().addListener((obs, old, n) -> refreshSuggestions(n));
-
-        // Initial compute (handles freshly opened view with any existing text)
-        refreshSuggestions(input.getText());
 
         HBox genBox = new HBox(btnGenerate);
         genBox.setSpacing(8);
@@ -176,16 +160,11 @@ public class WritingView implements SectionEvents {
         ScrollPane rightScroll = new ScrollPane(rightColumn);
         rightScroll.setFitToWidth(true);
         rightScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-
-        // These two actually clamp the BorderPane right region:
         rightScroll.setPrefWidth(420);
         rightScroll.setMaxWidth(420);
-
-        // This is optional, but keeps the viewport consistent
         rightScroll.setPrefViewportWidth(420);
 
         root.setRight(rightScroll);
-
 
         // Bottom status
         HBox statusBar = new HBox(status);
@@ -216,6 +195,41 @@ public class WritingView implements SectionEvents {
 
     // ===== helpers =====
 
+    /** Listen for changes in the input editor (for debounced checks). */
+    public javafx.beans.property.StringProperty inputTextProperty() {
+        return input.textProperty();         // <-- input, not output
+    }
+
+    /** Render suggestion list and select spans in the INPUT editor only. Called by controller. */
+    public void showSuggestions(List<SuggestionIssue> issues) {
+        if (issues == null) issues = List.of();
+
+        // Build rows for the ListView (Java 11 friendly).
+        List<String> rows = issues.stream()
+                .map(i -> String.format("[%s] %s (%d..%d)", i.type, i.message, i.start, i.end))
+                .collect(Collectors.toList());
+
+        suggestionsList.getItems().setAll(rows.toArray(new String[0]));
+
+        // Capture for selection mapping inside the handler
+        final List<SuggestionIssue> finalIssues = issues;
+
+        // Clicking a row selects its span IN THE INPUT editor.
+        suggestionsList.setOnMouseClicked(e -> {
+            int idx = suggestionsList.getSelectionModel().getSelectedIndex();
+            if (idx >= 0 && idx < finalIssues.size()) {
+                SuggestionIssue iss = finalIssues.get(idx);
+
+                // Clamp to input bounds
+                int start = Math.max(0, Math.min(iss.start, input.getLength()));
+                int end   = Math.max(start, Math.min(iss.end,   input.getLength()));
+
+                input.requestFocus();
+                input.selectRange(start, end);
+            }
+        });
+    }
+
     static void clampWidth(Region r, double w) {
         r.setMaxWidth(w);
         r.setPrefWidth(w);
@@ -227,22 +241,14 @@ public class WritingView implements SectionEvents {
         return new VBox(6, lbl, n);
     }
 
-    // Add this helper
     private Node titled(String title, Node content) {
         if (content instanceof TitledPane) {
-            // Section already provides its own titled container — use it directly.
             return content;
         }
         TitledPane tp = new TitledPane(title, content);
         tp.setCollapsible(true);
         tp.setExpanded(true);
         return tp;
-    }
-
-
-    /** Recompute suggestions for the given text and refresh the list. */
-    private void refreshSuggestions(String text) {
-        suggestionsList.getItems().setAll(SuggestionEngine.suggest(text));
     }
 
     // ===== SectionEvents callbacks (update local state) =====
@@ -265,8 +271,6 @@ public class WritingView implements SectionEvents {
             case "code"         -> "Produce concise code documentation and examples.";
             default             -> "You are a helpful assistant. Improve clarity while preserving meaning.";
         };
-        // If your PresetTabsView shows the instruction, ensure it binds to our field
-        // or add a method there that sets its text. We avoid calling unknown APIs here.
     }
 
     /** Optional hook used by controller after preset changes (no-op). */
@@ -279,9 +283,22 @@ public class WritingView implements SectionEvents {
         }
     }
 
-    /** Controller pushes computed suggestions into the list. */
-    public void setSuggestions(List<Suggestion> suggestions) {
-        suggestionsList.getItems().setAll(suggestions);
+    /** (Legacy) allow controller to push prebuilt suggestion rows if needed. */
+    public void setSuggestions(List<?> suggestions) {
+        if (suggestions == null || suggestions.isEmpty()) {
+            suggestionsList.getItems().clear();
+            return;
+        }
+        // If controller pushes strings, accept them; otherwise fall back to toString()
+        if (!suggestions.isEmpty() && suggestions.get(0) instanceof String) {
+            @SuppressWarnings("unchecked")
+            List<String> rows = (List<String>) suggestions;
+            suggestionsList.getItems().setAll(rows);
+        } else {
+            suggestionsList.getItems().setAll(
+                    suggestions.stream().map(Object::toString).collect(Collectors.toList())
+            );
+        }
     }
 
     // Clears input/output editors
@@ -292,10 +309,6 @@ public class WritingView implements SectionEvents {
 
     // Clears the suggestions list
     public void clearSuggestions() {
-        // If you keep a warning label, you can keep the placeholder as-is
-        // and just clear the list.
-        // suggestionsList.setPlaceholder(new Label("No suggestions"));
-        // suggestionsList.getItems().clear();
         suggestionsList.getItems().clear();
     }
 
@@ -311,35 +324,15 @@ public class WritingView implements SectionEvents {
 
     // Full new-session reset (used by controller)
     public void resetForNewSession() {
-        // default preset
         activePresetKey = "general";
-        // knobs + prompt
         resetKnobsToPresetDefaults();
-
-        // editors/suggestions
         clearEditors();
         clearSuggestions();
-
-        input.clear();
-        output.clear();
         updateInputStats("");
         updateOutputStats("");
-
-        // stats labels
-        inputStats.setText("Words: 0  Sentences: 0  FRE: —  FKGL: —");
-        outputStats.setText("Words: 0 Sentences: 0 • FRE: —  FKGL: —");
-
+        inputStats.setText("Words: 0  •  Sentences: 0  •  FRE: —  •  FKGL: —");
+        outputStats.setText("Words: 0  •  Sentences: 0  •  FRE: —  •  FKGL: —");
         status.setText("Session created.");
-    }
-
-    // Attach live listeners once when the view is built
-    private void wireLiveStats() {
-        input.textProperty().addListener((obs, oldV, newV) -> updateInputStats(newV));
-        output.textProperty().addListener((obs, oldV, newV) -> updateOutputStats(newV));
-
-        // initialize labels on first show
-        updateInputStats(input.getText());
-        updateOutputStats(output.getText());
     }
 
     private void updateInputStats(String text) {
@@ -365,7 +358,7 @@ public class WritingView implements SectionEvents {
                 words, sentences, freS, fkglS);
     }
 
-    // Flesch Reading Ease: 206.835 − 1.015*(words/sentences) − 84.6*(syllables/words)
+    // Flesch Reading Ease
     private Double computeFre(String text) {
         int words = org.example.app.util.TextStats.words(text);
         int sents = org.example.app.util.TextStats.sentences(text);
@@ -376,7 +369,7 @@ public class WritingView implements SectionEvents {
         return 206.835 - 1.015 * wps - 84.6 * spw;
     }
 
-    // Flesch–Kincaid Grade Level: 0.39*(words/sentences) + 11.8*(syllables/words) − 15.59
+    // Flesch–Kincaid Grade Level
     private Double computeFkgl(String text) {
         int words = org.example.app.util.TextStats.words(text);
         int sents = org.example.app.util.TextStats.sentences(text);
@@ -386,8 +379,6 @@ public class WritingView implements SectionEvents {
         double spw = (double) syll  / words;
         return 0.39 * wps + 11.8 * spw - 15.59;
     }
-
-
 
     // ===== setters the controller expects =====
     public void setTemperature(double v) { currentTemperature = v; }
@@ -403,4 +394,5 @@ public class WritingView implements SectionEvents {
     public String getStyleKey()    { return currentStyle; }
     public String getTextModeKey() { return currentTextMode; }
     public String getLanguage()    { return currentLanguage; }
+    public String getInputText()   { return input.getText(); }
 }

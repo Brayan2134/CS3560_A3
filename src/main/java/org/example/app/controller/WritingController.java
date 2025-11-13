@@ -13,6 +13,11 @@ import org.example.app.model.WritingModel;
 import org.example.app.preset.Preset;
 import org.example.app.preset.PresetCapabilities;
 import org.example.app.preset.PresetRegistry;
+import org.example.app.suggest.CompositeSuggestionEngine;
+import org.example.app.suggest.NoopSuggestionEngine;
+import org.example.app.suggest.SuggestionEngine;
+import org.example.app.suggest.SuggestionRequest;
+import org.example.app.suggest.SuggestionIssue;
 import org.example.app.view.WritingView;
 import org.example.app.persistence.*;
 import org.example.app.util.*;
@@ -24,9 +29,17 @@ import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 
 import javafx.animation.PauseTransition;
 import javafx.util.Duration;
+
+import java.util.concurrent.TimeUnit;
+
+import javafx.application.Platform;
+
 
 public class WritingController {
     private final PauseTransition inputDebounce = new PauseTransition(Duration.millis(150));
@@ -43,6 +56,12 @@ public class WritingController {
                     ".writing-assistant", "last-session.json"));
     private String currentSessionId;
 
+    private final SuggestionEngine suggest;
+    private final ScheduledExecutorService suggestScheduler = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledFuture<?> pendingSuggest;
+    private final ChangeListener<String> onInputChanged = (obs, oldV, newV) -> debounceSuggest(newV);
+
+
     // shortcuts
     private static final KeyCombination SAVE_KC = new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN);
     private static final KeyCombination HISTORY_KC = new KeyCodeCombination(KeyCode.H, KeyCombination.CONTROL_DOWN);
@@ -54,9 +73,32 @@ public class WritingController {
         this.model = model;
         this.view = view;
 
+        // NEW: default engine (swap later for a real provider)
+        this.suggest = new CompositeSuggestionEngine(new NoopSuggestionEngine());
+
         wireUI();
-        openOrCreateSession();  // <<— TRY TO RESTORE LAST SESSION
+        openOrCreateSession();
         applyPresetDefaults(view.currentPresetKey());
+
+        // NEW: start listening + first kick
+        this.view.inputTextProperty().addListener(onInputChanged);
+        debounceSuggest(this.view.getInputText());
+    }
+
+    private void debounceSuggest(String text) {
+        if (pendingSuggest != null) pendingSuggest.cancel(false);
+        pendingSuggest = suggestScheduler.schedule(() -> runSuggest(text), 250, TimeUnit.MILLISECONDS);
+    }
+
+    private void runSuggest(String text) {
+        try {
+            var req = SuggestionRequest.of(text == null ? "" : text);
+            suggest.checkAsync(req).thenAccept(result ->
+                    Platform.runLater(() -> view.showSuggestions(result.issues))
+            );
+        } catch (Throwable t) {
+            Platform.runLater(() -> view.showSuggestions(java.util.List.of()));
+        }
     }
 
     private void wireStatsAndSuggestions() {
@@ -78,8 +120,10 @@ public class WritingController {
     }
 
     private void updateSuggestions(String txt) {
-        var list = SuggestionEngine.suggest(txt);
-        view.setSuggestions(list);
+        var req = SuggestionRequest.of(txt == null ? "" : txt);
+        suggest.checkAsync(req).thenAccept(result ->
+                Platform.runLater(() -> view.showSuggestions(result.issues))
+        );
     }
 
     private void updateStats(String txt, boolean forInput) {

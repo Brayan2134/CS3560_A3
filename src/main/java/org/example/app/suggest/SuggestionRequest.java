@@ -23,7 +23,7 @@ import java.util.Set;
  *
  * INVARIANTS
  *  - All fields are non-null after construction
- *  - {@code caret >= -1} (where -1 means “unknown”)
+ *  - {@code caret >= -1} (where -1 means "unknown")
  *  - Collections are immutable (empty sets by default)
  *
  * NOTES
