@@ -123,8 +123,8 @@ public class WritingView implements SectionEvents {
 
         // Wrap suggestions UI into a container we can hide without breaking functionality
         VBox suggestionsBox = new VBox(6, new Label("Suggestions"), suggestionsList);
-        suggestionsBox.setVisible(false); // hidden by default (you can flip to true later)
-        suggestionsBox.setManaged(false); // don't reserve layout space while hidden
+        suggestionsBox.setVisible(true); // hidden by default (you can flip to true later)
+        suggestionsBox.setManaged(true); // don't reserve layout space while hidden
 
         Node presetTabsNode = presetTabs.getNode();
 

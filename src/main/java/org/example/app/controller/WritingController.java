@@ -13,11 +13,8 @@ import org.example.app.model.WritingModel;
 import org.example.app.preset.Preset;
 import org.example.app.preset.PresetCapabilities;
 import org.example.app.preset.PresetRegistry;
-import org.example.app.suggest.CompositeSuggestionEngine;
-import org.example.app.suggest.NoopSuggestionEngine;
+import org.example.app.suggest.*;
 import org.example.app.suggest.SuggestionEngine;
-import org.example.app.suggest.SuggestionRequest;
-import org.example.app.suggest.SuggestionIssue;
 import org.example.app.view.WritingView;
 import org.example.app.persistence.*;
 import org.example.app.util.*;
@@ -74,7 +71,7 @@ public class WritingController {
         this.view = view;
 
         // NEW: default engine (swap later for a real provider)
-        this.suggest = new CompositeSuggestionEngine(new NoopSuggestionEngine());
+        this.suggest = new CompositeSuggestionEngine(new FakeSpellEngine());
 
         wireUI();
         openOrCreateSession();
